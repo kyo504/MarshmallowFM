@@ -74,13 +74,19 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 } else if(mMediaController.getPlaybackState().getState() == PlaybackState.STATE_PAUSED){
                     mMediaController.getTransportControls().play();
                 } else {
-                    Uri uri = Uri.parse("http://c.espnradio.com/s:5L8r1/audio/2580934/pti_2015-10-14-180334.64k.mp3");
+                    Uri uri = Uri.parse("https://api.soundcloud.com/tracks/300554964/stream?client_id=3ed8237e8a4bfc63db818a732c95bc38");
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        mMediaController.getTransportControls().playFromUri(uri, null);
+                        Bundle bundle = new Bundle();
+                        bundle.putString(MediaMetadata.METADATA_KEY_ARTIST, "Zion.T");
+                        bundle.putString(MediaMetadata.METADATA_KEY_TITLE, "Complex");
+                        bundle.putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg");
+                        mMediaController.getTransportControls().playFromUri(uri, bundle);
                     } else {
                         Bundle bundle = new Bundle();
-                        bundle.putParcelable(AudioPlayerService.PARAM_TRACK_URI, uri);
-                        mMediaController.getTransportControls().playFromSearch("", bundle);
+                        bundle.putString(MediaMetadata.METADATA_KEY_ARTIST, "Zion.T");
+                        bundle.putString(MediaMetadata.METADATA_KEY_TITLE, "Complex");
+                        bundle.putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg");
+                        mMediaController.getTransportControls().playFromUri(uri, bundle);
                     }
 
 

@@ -6,7 +6,10 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioManager;
+import android.media.MediaDescription;
 import android.media.MediaMetadata;
 import android.media.MediaPlayer;
 import android.media.session.MediaController;
@@ -16,8 +19,13 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.support.v4.media.MediaDescriptionCompat;
+
+import com.emuneee.marshmallowfm.utils.LogHelper;
 
 import java.io.IOException;
+
+import static android.content.ContentValues.TAG;
 
 public class AudioPlayerService extends Service implements MediaPlayer.OnPreparedListener,
         MediaPlayer.OnBufferingUpdateListener, MediaPlayer.OnCompletionListener {
@@ -69,10 +77,9 @@ public class AudioPlayerService extends Service implements MediaPlayer.OnPrepare
                                 .build();
                         mMediaSession.setPlaybackState(mPlaybackState);
                         mMediaSession.setMetadata(new MediaMetadata.Builder()
-                                .putString(MediaMetadata.METADATA_KEY_ARTIST, "ESPN: PTI")
-                                .putString(MediaMetadata.METADATA_KEY_AUTHOR, "ESPN: PTI")
-                                .putString(MediaMetadata.METADATA_KEY_ALBUM, "ESPN")
-                                .putString(MediaMetadata.METADATA_KEY_TITLE, "Cubs The Favorites?: 10/14/15")
+                                .putString(MediaMetadata.METADATA_KEY_ARTIST, extras.getString(MediaMetadata.METADATA_KEY_ARTIST))
+                                .putString(MediaMetadata.METADATA_KEY_TITLE, extras.getString(MediaMetadata.METADATA_KEY_TITLE))
+                                .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, extras.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI))
                                 .build());
                         break;
                     case PlaybackState.STATE_NONE:
@@ -83,10 +90,9 @@ public class AudioPlayerService extends Service implements MediaPlayer.OnPrepare
                                 .build();
                         mMediaSession.setPlaybackState(mPlaybackState);
                         mMediaSession.setMetadata(new MediaMetadata.Builder()
-                                .putString(MediaMetadata.METADATA_KEY_ARTIST, "ESPN: PTI")
-                                .putString(MediaMetadata.METADATA_KEY_AUTHOR, "ESPN: PTI")
-                                .putString(MediaMetadata.METADATA_KEY_ALBUM, "ESPN")
-                                .putString(MediaMetadata.METADATA_KEY_TITLE, "Cubs The Favorites?: 10/14/15")
+                                .putString(MediaMetadata.METADATA_KEY_ARTIST, extras.getString(MediaMetadata.METADATA_KEY_ARTIST))
+                                .putString(MediaMetadata.METADATA_KEY_TITLE, extras.getString(MediaMetadata.METADATA_KEY_TITLE))
+                                .putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, extras.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI))
                                 .build());
                         break;
 
@@ -253,16 +259,36 @@ public class AudioPlayerService extends Service implements MediaPlayer.OnPrepare
 
     private void updateNotification() {
 
+        MediaDescription description = mMediaController.getMetadata().getDescription();
+
+        String fetchArtUrl = null;
+        Bitmap art = null;
+        if (description.getIconUri() != null) {
+            // This sample assumes the iconUri will be a valid URL formatted String, but
+            // it can actually be any valid Android Uri formatted String.
+            // async fetch the album art icon
+            String artUrl = description.getIconUri().toString();
+            art = AlbumArtCache.getInstance().getBigImage(artUrl);
+            if (art == null) {
+                fetchArtUrl = artUrl;
+                // use a placeholder art while the remote art is being downloaded
+//                art = BitmapFactory.decodeResource(mService.getResources(),
+//                        R.drawable.ic_default_art);
+            }
+        }
+
+
         Notification.Action playPauseAction = mPlaybackState.getState() == PlaybackState.STATE_PLAYING ?
                 createAction(R.drawable.ic_action_pause, "Pause", ACTION_PAUSE) :
                 createAction(R.drawable.ic_action_play, "Play", ACTION_PLAY);
 
-        Notification notification = new Notification.Builder(this)
-                .setPriority(Notification.PRIORITY_DEFAULT)
+        Notification.Builder notificationBuilder = new Notification.Builder(this);
+
+        notificationBuilder.setPriority(Notification.PRIORITY_DEFAULT)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setCategory(Notification.CATEGORY_TRANSPORT)
-                .setContentTitle("Cubs The Favorites?: 10/14/15")
-                .setContentText("ESPN: PTI")
+                .setContentTitle(description.getTitle())
+                .setContentText(description.getSubtitle())
                 .setOngoing(mPlaybackState.getState() == PlaybackState.STATE_PLAYING)
                 .setShowWhen(false)
                 .setSmallIcon(R.mipmap.ic_launcher)
@@ -273,7 +299,28 @@ public class AudioPlayerService extends Service implements MediaPlayer.OnPrepare
                 .setStyle(new Notification.MediaStyle()
                         .setMediaSession(mMediaSession.getSessionToken())
                         .setShowActionsInCompactView(1, 2))
-                .build();
-        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(1, notification);
+                .setLargeIcon(art);
+
+        if (fetchArtUrl != null) {
+            fetchBitmapFromURLAsync(fetchArtUrl, notificationBuilder);
+        }
+
+        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(1, notificationBuilder.build());
+    }
+
+    private void fetchBitmapFromURLAsync(final String bitmapUrl,
+                                         final Notification.Builder builder) {
+        AlbumArtCache.getInstance().fetch(bitmapUrl, new AlbumArtCache.FetchListener() {
+            @Override
+            public void onFetched(String artUrl, Bitmap bitmap, Bitmap icon) {
+                if (mMediaController.getMetadata() != null && mMediaController.getMetadata().getDescription().getIconUri() != null &&
+                        mMediaController.getMetadata().getDescription().getIconUri().toString().equals(artUrl)) {
+                    // If the media is still the same, update the notification:
+                    LogHelper.d(TAG, "fetchBitmapFromURLAsync: set bitmap to ", artUrl);
+                    builder.setLargeIcon(bitmap);
+                    ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(1, builder.build());
+                }
+            }
+        });
     }
 }
