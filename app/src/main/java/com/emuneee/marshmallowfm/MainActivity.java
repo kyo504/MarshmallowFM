@@ -2,13 +2,15 @@ package com.emuneee.marshmallowfm;
 
 import android.content.ComponentName;
 import android.content.Intent;
-import android.content.ServiceConnection;
-import android.media.MediaMetadata;
-import android.media.session.MediaController;
 import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.os.Build;
-import android.os.IBinder;
+import android.os.RemoteException;
+import android.support.v4.media.MediaBrowserCompat;
+import android.support.v4.media.MediaMetadataCompat;
+import android.support.v4.media.session.MediaControllerCompat;
+import android.support.v4.media.session.MediaSessionCompat;
+import android.support.v4.media.session.PlaybackStateCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -16,15 +18,20 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener, ServiceConnection {
+import com.emuneee.marshmallowfm.utils.LogHelper;
 
-    private MediaController mMediaController;
+public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+
+    private static final String TAG = LogHelper.makeLogTag(MainActivity.class);
+
+    private MediaBrowserCompat mMediaBrowser;
     private ImageButton mPlayButton;
     private TextView mTitle;
 
-    private MediaController.Callback mMediaControllerCallback = new MediaController.Callback() {
+
+    private MediaControllerCompat.Callback mMediaControllerCallback = new MediaControllerCompat.Callback() {
         @Override
-        public void onPlaybackStateChanged(PlaybackState state) {
+        public void onPlaybackStateChanged(PlaybackStateCompat state) {
 
             switch (state.getState()) {
                 case PlaybackState.STATE_NONE:
@@ -44,11 +51,50 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
 
         @Override
-        public void onMetadataChanged(MediaMetadata metadata) {
+        public void onMetadataChanged(MediaMetadataCompat metadata) {
             super.onMetadataChanged(metadata);
-            mTitle.setText(metadata.getString(MediaMetadata.METADATA_KEY_TITLE));
+            mTitle.setText(metadata.getString(MediaMetadataCompat.METADATA_KEY_TITLE));
         }
     };
+
+    private final MediaBrowserCompat.ConnectionCallback mConnectionCallback = new MediaBrowserCompat.ConnectionCallback() {
+        @Override
+        public void onConnected() {
+            Log.d(TAG, "onConnected");
+            try {
+                connectToSession(mMediaBrowser.getSessionToken());
+            } catch (RemoteException e) {
+                LogHelper.e(TAG, e, "could not connect media controller");
+            }
+        }
+
+        @Override
+        public void onConnectionSuspended() {
+            super.onConnectionSuspended();
+        }
+
+        @Override
+        public void onConnectionFailed() {
+            super.onConnectionFailed();
+        }
+    };
+
+    private void connectToSession(MediaSessionCompat.Token token) throws RemoteException {
+        MediaControllerCompat mediaController = new MediaControllerCompat(this, token);
+        setSupportMediaController(mediaController);
+        mediaController.registerCallback(mMediaControllerCallback);
+
+//        if (shouldShowControls()) {
+//            showPlaybackControls();
+//        } else {
+//            LogHelper.d(TAG, "connectionCallback.onConnected: " +
+//                    "hiding controls because metadata is null");
+//            hidePlaybackControls();
+//        }
+//
+//        onMediaControllerConnected();
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,67 +106,76 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         findViewById(R.id.rewind).setOnClickListener(this);
         findViewById(R.id.forward).setOnClickListener(this);
 
-        Intent intent = new Intent(this, AudioPlayerService.class);
-        getApplicationContext().bindService(intent, this, 0);
+        mMediaBrowser = new MediaBrowserCompat(this, new ComponentName(this, AudioPlayerService.class), mConnectionCallback, null);
     }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Log.d(TAG, "Activity onStart");
+
+        mMediaBrowser.connect();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        LogHelper.d(TAG, "Activity onStop");
+        if (getSupportMediaController() != null) {
+            getSupportMediaController().unregisterCallback(mMediaControllerCallback);
+        }
+        mMediaBrowser.disconnect();
+    }
+
 
     @Override
     public void onClick(View v) {
 
         switch (v.getId()) {
             case R.id.play:
-                if (mMediaController.getPlaybackState().getState() == PlaybackState.STATE_PLAYING) {
-                    mMediaController.getTransportControls().pause();
-                } else if(mMediaController.getPlaybackState().getState() == PlaybackState.STATE_PAUSED){
-                    mMediaController.getTransportControls().play();
-                } else {
+                int pbState = getSupportMediaController().getPlaybackState().getState();
+                if (pbState == PlaybackState.STATE_PLAYING) {
+                    getSupportMediaController().getTransportControls().pause();
+                } else if (pbState == PlaybackStateCompat.STATE_PAUSED) {
+                    getSupportMediaController().getTransportControls().play();
+                }else {
                     Uri uri = Uri.parse("https://api.soundcloud.com/tracks/300554964/stream?client_id=3ed8237e8a4bfc63db818a732c95bc38");
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        Bundle bundle = new Bundle();
-                        bundle.putString(MediaMetadata.METADATA_KEY_ARTIST, "Zion.T");
-                        bundle.putString(MediaMetadata.METADATA_KEY_TITLE, "Complex");
-                        bundle.putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg");
-                        mMediaController.getTransportControls().playFromUri(uri, bundle);
-                    } else {
-                        Bundle bundle = new Bundle();
-                        bundle.putString(MediaMetadata.METADATA_KEY_ARTIST, "Zion.T");
-                        bundle.putString(MediaMetadata.METADATA_KEY_TITLE, "Complex");
-                        bundle.putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg");
-                        mMediaController.getTransportControls().playFromUri(uri, bundle);
-                    }
-
-
+                    Bundle bundle = new Bundle();
+                    bundle.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Zion.T");
+                    bundle.putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Complex");
+                    bundle.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg");
+                    getSupportMediaController().getTransportControls().playFromUri(uri, bundle);
                 }
+//                if (mMediaController.getPlaybackState().getState() == PlaybackState.STATE_PLAYING) {
+//                    mMediaController.getTransportControls().pause();
+//                } else if(mMediaController.getPlaybackState().getState() == PlaybackState.STATE_PAUSED){
+//                    mMediaController.getTransportControls().play();
+//                } else {
+//                    Uri uri = Uri.parse("https://api.soundcloud.com/tracks/300554964/stream?client_id=3ed8237e8a4bfc63db818a732c95bc38");
+//                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+//                        Bundle bundle = new Bundle();
+//                        bundle.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Zion.T");
+//                        bundle.putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Complex");
+//                        bundle.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg");
+//                        mMediaController.getTransportControls().playFromUri(uri, bundle);
+//                    } else {
+//                        Bundle bundle = new Bundle();
+//                        bundle.putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Zion.T");
+//                        bundle.putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Complex");
+//                        bundle.putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg");
+//                        mMediaController.getTransportControls().playFromUri(uri, bundle);
+//                    }
+//
+//
+//                }
                 break;
             case R.id.rewind:
-                mMediaController.getTransportControls().rewind();
+                getSupportMediaController().getTransportControls().rewind();
                 break;
             case R.id.forward:
-                mMediaController.getTransportControls().fastForward();
+                getSupportMediaController().getTransportControls().fastForward();
                 break;
         }
 
-    }
-
-    @Override
-    public void onServiceConnected(ComponentName name, IBinder service) {
-
-        if (service instanceof AudioPlayerService.ServiceBinder) {
-            mMediaController = new MediaController(MainActivity.this,
-                    ((AudioPlayerService.ServiceBinder) service).getService().getMediaSessionToken());
-            mMediaController.registerCallback(mMediaControllerCallback);
-        }
-    }
-
-    @Override
-    public void onServiceDisconnected(ComponentName name) {
-
-    }
-
-    @Override
-    protected void onStart() {
-        super.onStart();
-        Intent intent = new Intent(this, AudioPlayerService.class);
-        startService(intent);
     }
 }
