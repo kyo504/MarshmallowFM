@@ -21,7 +21,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.net.wifi.WifiManager;
+import android.os.Bundle;
 import android.os.PowerManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -64,7 +66,6 @@ public class LocalPlayback implements Playback, AudioManager.OnAudioFocusChangeL
     private int mState;
     private boolean mPlayOnFocusGain;
     private Callback mCallback;
-    private final MusicProvider mMusicProvider;
     private volatile boolean mAudioNoisyReceiverRegistered;
     private volatile int mCurrentPosition;
     private volatile String mCurrentMediaId;
@@ -92,9 +93,8 @@ public class LocalPlayback implements Playback, AudioManager.OnAudioFocusChangeL
         }
     };
 
-    public LocalPlayback(Context context, MusicProvider musicProvider) {
+    public LocalPlayback(Context context) {
         this.mContext = context;
-        this.mMusicProvider = musicProvider;
         this.mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         // Create the Wifi lock (this does not acquire the lock, this just creates it)
         this.mWifiLock = ((WifiManager) context.getSystemService(Context.WIFI_SERVICE))
@@ -154,6 +154,51 @@ public class LocalPlayback implements Playback, AudioManager.OnAudioFocusChangeL
     }
 
     @Override
+    public void playFromUri(Uri uri, Bundle extras) {
+        mPlayOnFocusGain = true;
+        tryToGetAudioFocus();
+        registerAudioNoisyReceiver();
+
+        if (mState == PlaybackStateCompat.STATE_PAUSED  && mMediaPlayer != null) {
+            configMediaPlayerState();
+        } else {
+            mState = PlaybackStateCompat.STATE_STOPPED;
+            relaxResources(false); // release everything except MediaPlayer
+
+            try {
+                createMediaPlayerIfNeeded();
+
+                mState = PlaybackStateCompat.STATE_BUFFERING;
+
+                mMediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+                mMediaPlayer.setDataSource(uri.toString());
+
+                // Starts preparing the media player in the background. When
+                // it's done, it will call our OnPreparedListener (that is,
+                // the onPrepared() method on this class, since we set the
+                // listener to 'this'). Until the media player is prepared,
+                // we *cannot* call start() on it!
+                mMediaPlayer.prepareAsync();
+
+                // If we are streaming from the internet, we want to hold a
+                // Wifi lock, which prevents the Wifi radio from going to
+                // sleep while the song is playing.
+                mWifiLock.acquire();
+
+                if (mCallback != null) {
+                    mCallback.onPlaybackStatusChanged(mState);
+                }
+
+            } catch (IOException ex) {
+                LogHelper.e(TAG, ex, "Exception playing song");
+                if (mCallback != null) {
+                    mCallback.onError(ex.getMessage());
+                }
+            }
+        }
+    }
+
+    @Override
     public void play() {
         mPlayOnFocusGain = true;
         tryToGetAudioFocus();
@@ -169,6 +214,8 @@ public class LocalPlayback implements Playback, AudioManager.OnAudioFocusChangeL
                 createMediaPlayerIfNeeded();
 
                 mState = PlaybackStateCompat.STATE_BUFFERING;
+
+                String source = "https://api.soundcloud.com/tracks/300554964/stream?client_id=3ed8237e8a4bfc63db818a732c95bc38";
 
                 mMediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
                 mMediaPlayer.setDataSource(source);

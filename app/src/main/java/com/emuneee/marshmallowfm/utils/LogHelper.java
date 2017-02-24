@@ -17,9 +17,11 @@ package com.emuneee.marshmallowfm.utils;
 
 import android.util.Log;
 
+import com.emuneee.marshmallowfm.BuildConfig;
+
 public class LogHelper {
 
-    private static final String LOG_PREFIX = "AudioPlayer";
+    private static final String LOG_PREFIX = "uamp_";
     private static final int LOG_PREFIX_LENGTH = LOG_PREFIX.length();
     private static final int MAX_LOG_TAG_LENGTH = 23;
 
@@ -41,12 +43,16 @@ public class LogHelper {
 
     public static void v(String tag, Object... messages) {
         // Only log VERBOSE if build type is DEBUG
-        log(tag, Log.VERBOSE, null, messages);
+        if (BuildConfig.DEBUG) {
+            log(tag, Log.VERBOSE, null, messages);
+        }
     }
 
     public static void d(String tag, Object... messages) {
         // Only log DEBUG if build type is DEBUG
-        log(tag, Log.DEBUG, null, messages);
+        if (BuildConfig.DEBUG) {
+            log(tag, Log.DEBUG, null, messages);
+        }
     }
 
     public static void i(String tag, Object... messages) {

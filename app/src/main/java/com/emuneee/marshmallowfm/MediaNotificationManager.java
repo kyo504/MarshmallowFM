@@ -230,8 +230,8 @@ public class MediaNotificationManager extends BroadcastReceiver {
 
         // If skip to previous action is enabled
         if ((mPlaybackState.getActions() & PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS) != 0) {
-//            notificationBuilder.addAction(R.drawable.ic_skip_previous_white_24dp,
-//                        mService.getString(R.string.label_previous), mPreviousIntent);
+            notificationBuilder.addAction(R.drawable.ic_action_rewind,
+                        mService.getString(R.string.label_previous), mPreviousIntent);
 
             // If there is a "skip to previous" button, the play/pause button will
             // be the second one. We need to keep track of it, because the MediaStyle notification
@@ -243,10 +243,10 @@ public class MediaNotificationManager extends BroadcastReceiver {
         addPlayPauseAction(notificationBuilder);
 
         // If skip to next action is enabled
-//        if ((mPlaybackState.getActions() & PlaybackStateCompat.ACTION_SKIP_TO_NEXT) != 0) {
-//            notificationBuilder.addAction(R.drawable.ic_skip_next_white_24dp,
-//                mService.getString(R.string.label_next), mNextIntent);
-//        }
+        if ((mPlaybackState.getActions() & PlaybackStateCompat.ACTION_SKIP_TO_NEXT) != 0) {
+            notificationBuilder.addAction(R.drawable.ic_action_fast_forward,
+                mService.getString(R.string.label_next), mNextIntent);
+        }
 
         MediaDescriptionCompat description = mMetadata.getDescription();
 
@@ -267,16 +267,18 @@ public class MediaNotificationManager extends BroadcastReceiver {
         }
 
         notificationBuilder
-                .setStyle(new NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(
-                            new int[]{playPauseButtonPosition})  // show only play/pause in compact view
-                    .setMediaSession(mSessionToken))
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setPriority(Notification.PRIORITY_DEFAULT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setCategory(Notification.CATEGORY_TRANSPORT)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setLargeIcon(art)
                 .setUsesChronometer(true)
                 .setContentTitle(description.getTitle())
                 .setContentText(description.getSubtitle())
-                .setLargeIcon(art);
+                .setStyle(new NotificationCompat.MediaStyle()
+                        .setShowActionsInCompactView(new int[]{playPauseButtonPosition})  // show only play/pause in compact view
+                        .setMediaSession(mSessionToken));
+
 
 
         setNotificationPlaybackState(notificationBuilder);

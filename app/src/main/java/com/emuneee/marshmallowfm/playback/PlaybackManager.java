@@ -17,6 +17,7 @@
 package com.emuneee.marshmallowfm.playback;
 
 import android.content.res.Resources;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -35,14 +36,12 @@ public class PlaybackManager implements Playback.Callback {
     // Action to thumbs up a media item
     private static final String CUSTOM_ACTION_THUMBS_UP = "com.example.android.uamp.THUMBS_UP";
 
-    private Resources mResources;
     private Playback mPlayback;
     private PlaybackServiceCallback mServiceCallback;
     private MediaSessionCallback mMediaSessionCallback;
 
-    public PlaybackManager(PlaybackServiceCallback serviceCallback, Resources resources, Playback playback) {
+    public PlaybackManager(PlaybackServiceCallback serviceCallback, Playback playback) {
         mServiceCallback = serviceCallback;
-        mResources = resources;
         mMediaSessionCallback = new MediaSessionCallback();
         mPlayback = playback;
         mPlayback.setCallback(this);
@@ -64,6 +63,16 @@ public class PlaybackManager implements Playback.Callback {
         mServiceCallback.onPlaybackStart();
         mPlayback.play();
     }
+
+    /**
+     * Handle a request to play music
+     */
+    public void handlePlayRequest(Uri uri, Bundle bundle) {
+        LogHelper.d(TAG, "handlePlayRequest: mState=" + mPlayback.getState());
+        mServiceCallback.onPlaybackStart();
+        mPlayback.playFromUri(uri, bundle);
+    }
+
 
     /**
      * Handle a request to pause music
@@ -168,6 +177,12 @@ public class PlaybackManager implements Playback.Callback {
         public void onPlay() {
             LogHelper.d(TAG, "play");
             handlePlayRequest();
+        }
+
+        @Override
+        public void onPlayFromUri(Uri uri, Bundle extras) {
+            LogHelper.d(TAG, "play from uri");
+            handlePlayRequest(uri, extras);
         }
 
         @Override

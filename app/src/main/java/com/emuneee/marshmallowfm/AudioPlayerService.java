@@ -21,12 +21,15 @@ import android.support.v4.media.MediaDescriptionCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import android.support.v4.media.MediaMetadataCompat;
+import android.util.Log;
 
+import com.emuneee.marshmallowfm.playback.LocalPlayback;
 import com.emuneee.marshmallowfm.playback.Playback;
 import com.emuneee.marshmallowfm.playback.PlaybackManager;
 import com.emuneee.marshmallowfm.utils.LogHelper;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class AudioPlayerService extends MediaBrowserServiceCompat implements PlaybackManager.PlaybackServiceCallback{
@@ -48,6 +51,7 @@ public class AudioPlayerService extends MediaBrowserServiceCompat implements Pla
     private PlaybackStateCompat mPlaybackState;
     private PlaybackStateCompat.Builder mStateBuilder;
     private MediaNotificationManager mMediaNotificationManager;
+    private PlaybackManager mPlaybackManager;
 
     // Extra on MediaSession that contains the Cast device name currently connected to
     public static final String EXTRA_CONNECTED_CAST = "com.example.android.uamp.CAST_NAME";
@@ -70,157 +74,58 @@ public class AudioPlayerService extends MediaBrowserServiceCompat implements Pla
 
 
     @Override
-    public void onLoadChildren(@NonNull String parentId, @NonNull Result<List<MediaBrowserCompat.MediaItem>> result) {
+    public void onLoadChildren(@NonNull String parentMediaId, @NonNull Result<List<MediaBrowserCompat.MediaItem>> result) {
 
+        Log.d(TAG, "OnLoadChildren: parentMediaId=" + parentMediaId);
+        if (parentMediaId == null) {
+            result.sendResult(null);
+            return;
+        }
+
+        if (mMusicProvider.isInitialized()) {
+            // if music library is ready, return immediately
+            result.sendResult(mMusicProvider.getChildren(parentMediaId, getResources()));
+        } else {
+            // otherwise, only return results when the music library is retrieved
+            result.detach();
+            mMusicProvider.retrieveMediaAsync(new MusicProvider.Callback() {
+                @Override
+                public void onMusicCatalogReady(boolean success) {
+                    result.sendResult(mMusicProvider.getChildren(parentMediaId, getResources()));
+                }
+            });
+        }
     }
 
     @Nullable
     @Override
     public BrowserRoot onGetRoot(@NonNull String clientPackageName, int clientUid, @Nullable Bundle rootHints) {
+        Log.d(TAG, "OnGetRoot: clientPackageName=" + clientPackageName + "; clientUid=" + clientUid + " ; rootHints=" + rootHints);
+
         return new BrowserRoot(ROOT_ID, null);
     }
 
-    private MediaSessionCompat.Callback mMediaSessionCallback = new MediaSessionCompat.Callback() {
-
-        @Override
-        public void onPlayFromSearch(String query, Bundle extras) {
-            Uri uri = extras.getParcelable(PARAM_TRACK_URI);
-            onPlayFromUri(uri, null);
-        }
-
-        @Override
-        public void onPlayFromUri(Uri uri, Bundle extras) {
-
-            try {
-                mMediaPlayer.reset();
-                mMediaPlayer.setDataSource(AudioPlayerService.this, uri);
-                mMediaPlayer.prepare();
-                mMediaPlayer.start();
-                // The service needs to continue running even after the bound client (usually a
-                // MediaController) disconnects, otherwise the music playback will stop.
-                // Calling startService(Intent) will keep the service running until it is explicitly killed.
-//                switch (mPlaybackState.getState()) {
-//                    case PlaybackStateCompat.STATE_PLAYING:
-//                    case PlaybackStateCompat.STATE_PAUSED:
-//                        mMediaPlayer.reset();
-//                        mMediaPlayer.setDataSource(AudioPlayerService.this, uri);
-//                        mMediaPlayer.prepare();
-//                        mPlaybackState = new PlaybackStateCompat.Builder()
-//                                .setState(PlaybackStateCompat.STATE_CONNECTING, 0, 1.0f)
-//                                .build();
-//                        mMediaSession.setPlaybackState(mPlaybackState);
-//                        mMediaSession.setMetadata(new MediaMetadataCompat.Builder()
-//                                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, extras.getString(MediaMetadataCompat.METADATA_KEY_ARTIST))
-//                                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, extras.getString(MediaMetadataCompat.METADATA_KEY_TITLE))
-//                                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, extras.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI))
-//                                .build());
-//                        break;
-//                    case PlaybackStateCompat.STATE_NONE:
-//                        mMediaPlayer.setDataSource(AudioPlayerService.this, uri);
-//                        mMediaPlayer.prepare();
-//                        mPlaybackState = new PlaybackStateCompat.Builder()
-//                                .setState(PlaybackStateCompat.STATE_CONNECTING, 0, 1.0f)
-//                                .build();
-//                        mMediaSession.setPlaybackState(mPlaybackState);
-//                        mMediaSession.setMetadata(new MediaMetadataCompat.Builder()
-//                                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, extras.getString(MediaMetadataCompat.METADATA_KEY_ARTIST))
-//                                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, extras.getString(MediaMetadataCompat.METADATA_KEY_TITLE))
-//                                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, extras.getString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI))
-//                                .build());
-//                        break;
-//
-//                }
-            } catch (IOException e) {
-
-            }
-
-        }
-
-        @Override
-        public void onPlay() {
-            switch (mPlaybackState.getState()) {
-                case PlaybackStateCompat.STATE_PAUSED:
-                    mMediaPlayer.start();
-                    mPlaybackState = new PlaybackStateCompat.Builder()
-                            .setState(PlaybackStateCompat.STATE_PLAYING, 0, 1.0f)
-                            .build();
-                    mMediaSession.setPlaybackState(mPlaybackState);
-//                    updateNotification();
-                    break;
-
-            }
-        }
-
-        @Override
-        public void onPause() {
-            switch (mPlaybackState.getState()) {
-                case PlaybackStateCompat.STATE_PLAYING:
-                    mMediaPlayer.pause();
-                    mPlaybackState = new PlaybackStateCompat.Builder()
-                            .setState(PlaybackStateCompat.STATE_PAUSED, 0, 1.0f)
-                            .build();
-                    mMediaSession.setPlaybackState(mPlaybackState);
-//                    updateNotification();
-                    break;
-
-            }
-        }
-
-        @Override
-        public void onRewind() {
-            switch (mPlaybackState.getState()) {
-                case PlaybackStateCompat.STATE_PLAYING:
-                    mMediaPlayer.seekTo(mMediaPlayer.getCurrentPosition() - 10000);
-                    break;
-
-            }
-        }
-
-        @Override
-        public void onFastForward() {
-            switch (mPlaybackState.getState()) {
-                case PlaybackStateCompat.STATE_PLAYING:
-                    mMediaPlayer.seekTo(mMediaPlayer.getCurrentPosition() + 10000);
-                    break;
-
-            }
-        }
-
-        @Override
-        public void onStop() {
-            stopForeground(true);
-        }
-    };
 
     @Override
     public void onCreate() {
         super.onCreate();
 
-        // Create a MediaSessionComPat
-        mMediaSession = new MediaSessionCompat(this, SESSION_TAG);
-
-        // Enable callbacks from MediaButtons and TransportControls
-        mMediaSession.setActive(true);
-        mMediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS |
-                MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
-
-        // Set an initial PlaybackState with ACTION_PLAY, so media buttons can start the player
-        mStateBuilder = new PlaybackStateCompat.Builder()
-                            .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PLAY_PAUSE);
-        mMediaSession.setPlaybackState(mStateBuilder.build());
-
-        // Register callbacks to handle callbacks from a media controller
-        mMediaSession.setCallback(mMediaSessionCallback);
-
-        // Set the session't token so that client activities communicate with it
-        setSessionToken(mMediaSession.getSessionToken());
-
         // Get an instance to AudioManager
         mAudioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 
+        LocalPlayback playback = new LocalPlayback(this);
+        mPlaybackManager = new PlaybackManager(this, playback);
+
+        // Start a new MediaSession
+        mMediaSession = new MediaSessionCompat(this, "MusicService");
+        setSessionToken(mMediaSession.getSessionToken());
+        mMediaSession.setCallback(mPlaybackManager.getMediaSessionCallback());
+        mMediaSession.setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS | MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS);
+
+        mPlaybackManager.updatePlaybackState(null);
+
         try {
             mMediaNotificationManager = new MediaNotificationManager(this);
-            mMediaNotificationManager.startNotification();
         } catch (RemoteException e) {
             throw new IllegalStateException("Could not create a MediaNotificationManager", e);
         }
@@ -239,6 +144,11 @@ public class AudioPlayerService extends MediaBrowserServiceCompat implements Pla
     @Override
     public void onPlaybackStart() {
         mMediaSession.setActive(true);
+        mMediaSession.setMetadata(new MediaMetadataCompat.Builder()
+        .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "Zion.T")
+        .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "Complex")
+        .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, "https://i1.sndcdn.com/artworks-000200892021-b4eaaw-large.jpg")
+        .build());
 
         // The service needs to continue running even after the bound client (usually a
         // MediaController) disconnects, otherwise the music playback will stop.

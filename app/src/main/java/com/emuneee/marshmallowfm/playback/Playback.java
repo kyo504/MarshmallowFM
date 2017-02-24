@@ -15,6 +15,9 @@
  */
 package com.emuneee.marshmallowfm.playback;
 
+import android.net.Uri;
+import android.os.Bundle;
+
 import static android.support.v4.media.session.MediaSessionCompat.QueueItem;
 
 public interface Playback {
@@ -71,6 +74,14 @@ public interface Playback {
      */
     void updateLastKnownStreamPosition();
 
+    /**
+     * Play music with the given information
+     */
+    void playFromUri(Uri uri, Bundle extras);
+
+    /**
+     * Play music with the given information
+     */
     void play();
 
     /**
